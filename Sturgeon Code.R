@@ -1,6 +1,6 @@
 ## Brett van Poorten and Bill Pine
 ## Sturgeon Code.R
-## January 2, 2019
+## created (as version 1) January 2, 2019; code with Ut created November 13, 2019
 ### R code reproduces Bill's SturMod 2.0 Excel file
 
 ### adjustments based on recommended edits by Ed Camp and Brett incorporated January 29, 2019
@@ -13,15 +13,15 @@ library(reshape)
 ###------------------------------------------------------###
 
 n.st <- 2  # number of pre-recruit stanzas [either 1 (hatchery fish are stocked 
-   #as eyed eggs) or 2 (hatchery fish are stocked sometime later so wild fish 
-   #have a period without competition with hatchery fish)]
-   ### NOTE: if n.st==1, you assume fish are stocked after all density dependence is complete;
-   ###       if n.st==2, you assume fish are stocked in the middle of density dependence (so they impact abundance)
+#as eyed eggs) or 2 (hatchery fish are stocked sometime later so wild fish 
+#have a period without competition with hatchery fish)]
+### NOTE: if n.st==1, you assume fish are stocked after all density dependence is complete;
+###       if n.st==2, you assume fish are stocked in the middle of density dependence (so they impact abundance)
 AR <- 1  # age at recruitment (end of density-dependent mortality)
 A <- 50  # oldest modelled age-class
 FIT <- FALSE   # set to true to estimate R0 and second stage U
 T1 <- 20       # time starts in 1901; T1 is the year when intense fishing stops (1920)
-T2 <- 47       # T2 is the year the dam building began (1947; coffer dams put in; access to habitat lost)
+T2 <- 57       # T2 is the year the dam building began (1957; coffer dams put in; access to habitat lost)
 T3 <- 84       # T3 is the year all fishing stopped (1983)
 T4 <- 123      # T4 is recovery year period
 Ttot <- 185    # Ttot is the total number of years evaluated (until 2085)
@@ -65,9 +65,11 @@ input$M <- .12  #(not used)
 input$relmort <- 0.95 # S  #(not used)
 input$Mad <- 0.095                # minimum adult mortality (at Linf)
 input$Mad.rec <- 0.095            # minimum adult mortality during recovery period
-input$u <- 1                      # exploitation rate stage 1
-input$bu <- 0.089                 # exploitation rate stage 2
-input$bu2 <- 0.0                  # exploitation rate stage 3
+# if exploitation rate history exists, load it here
+input$ut <- scan("sturg_sra.rep",skip=19,nlines=1)
+#input$u <- 1                      # exploitation rate stage 1
+#input$bu <- 0.089                 # exploitation rate stage 2
+#input$bu2 <- 0.0                  # exploitation rate stage 3
 input$dome <- TRUE                # dome-shaped exploitation rate? (TRUE/FALSE)
 input$lvuln <- 45                 # Length-at-50% vulnerability for ascending curve
 input$lvulnsd <- 10               # standard deviation for ascending curve
@@ -86,7 +88,7 @@ input$hvulnsd.s <- 10             # standard deviation for descending curve
 
 # Population
 input$Ro <- c(9970,2605)          # unfished recruitment (before and after dam)
-input$recK <- 5                   # recruitment compensation ratio
+input$recK <- 3.9                   # recruitment compensation ratio
 input$SXR <- 100                  # initial percent of wild recruitment
 input$fid <- 0.5                  # Fidelity to stocked population
 
@@ -96,8 +98,8 @@ input$astr <- 1                   # relative strength of strong years
 ifelse(input$aint==1,{
   input$astr <- 1
   input$Nstr <- 1
-  },
-  input$Nstr <- (input$aint-input$astr)/(input$aint-1))  # Normal strength
+},
+input$Nstr <- (input$aint-input$astr)/(input$aint-1))  # Normal strength
 input$Cstr <- 1                   # Egg prod divider
 input$stock <- 500                # Number stocked (if stocking allowed)
 input$Ms <- c(1,1)                # relative mortality of each pre-recruit stanza relative to each other (length must equal N.st)
@@ -107,7 +109,7 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
                 Year = c(0:(T3),1985:2084),
                 Anomoly = c(rep(c(rep(input$Nstr,input$aint-1),input$astr),length=Ttot)),
                 Stock = c(rep(FALSE,120),rep(TRUE,20),rep(FALSE,45)),
-                U = c(rep(input$u,T1),rep(input$bu,T3-T1),rep(input$bu2,Ttot-T3)),
+                U = c(input$ut[4:62],rep(0.14,T3-59),rep(0,Ttot-T3)),#c(rep(input$u,T1),rep(input$bu,T3-T1),rep(input$bu2,Ttot-T3)),
                 Dam =c(rep(1,T2),rep(2,Ttot-T2)),
                 stringsAsFactors = FALSE)
 
@@ -135,8 +137,8 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   Sks <- rep(0,n.age)
   ifelse( input$Skip,
           Sks <- pmax(0,(((1/input$mant)/exp(-1))/(input$mah-input$mai))*
-            (Age-input$mai)*exp(-(Age-input$mai)/(input$mah-input$mai))+
-            (1/input$mxnt)^(input$Linf/Length)),
+                        (Age-input$mai)*exp(-(Age-input$mai)/(input$mah-input$mai))+
+                        (1/input$mxnt)^(input$Linf/Length)),
           Sks <- 1/input$Nsk)
   # fecundity-at-age adjusted for skip spawning
   AdjFec <- Fec*Sks
@@ -155,8 +157,8 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   LaBurn <- Laf <- La
   for(i in 2:A){
     La[i] <- La[i-1]*exp(-Mu[i-1])  # survivorship absent fishing
-    LaBurn[i] <- LaBurn[i-1]*(1-input$bu*vuln[i-1])*exp(-Mu[i-1]) # survivorship during burn-in
-    Laf[i] <- Laf[i-1]*(1-input$u*vuln[i-1])*exp(-Mu[i-1])  # survivorship during fishing
+    LaBurn[i] <- LaBurn[i-1]*(1-mean(input$ut[(T1+1):T2])*vuln[i-1])*exp(-Mu[i-1]) # survivorship during burn-in
+    Laf[i] <- Laf[i-1]*(1-mean(input$ut[1:T1])*vuln[i-1])*exp(-Mu[i-1])  # survivorship during fishing
   }
   
   # all the same vectors as above, but for stocked fish
@@ -166,8 +168,8 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   Sks.s <- rep(0,n.age)
   ifelse( input$Skip.s,
           Sks.s <- pmax(0,(((1/input$mant.s)/exp(-1))/(input$mah.s-input$mai.s))*
-            (Age-input$mai.s)*exp(-(Age-input$mai.s)/(input$mah.s-input$mai.s))+
-            (1/input$mxnt.s)^(input$Linf.s/Length.s)),
+                          (Age-input$mai.s)*exp(-(Age-input$mai.s)/(input$mah.s-input$mai.s))+
+                          (1/input$mxnt.s)^(input$Linf.s/Length.s)),
           Sks.s <- 1/input$Nsk.s)
   AdjFec.s <- Fec.s*Sks.s
   Mu.s <- rep(0,n.age)
@@ -182,8 +184,8 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   LaBurn.s <- Laf.s <- La.s
   for(i in 2:A){
     La.s[i] <- La.s[i-1]*exp(-Mu.s[i-1])
-    LaBurn.s[i] <- LaBurn.s[i-1]*(1-input$bu*vuln.s[i-1])*exp(-Mu.s[i-1])
-    Laf.s[i] <- Laf.s[i-1]*(1-input$u*vuln.s[i-1])*exp(-Mu.s[i-1])
+    LaBurn.s[i] <- LaBurn.s[i-1]*(1-mean(input$ut[(T1+1):T2])*vuln.s[i-1])*exp(-Mu.s[i-1])
+    Laf.s[i] <- Laf.s[i-1]*(1-mean(input$ut[1:T1])*vuln.s[i-1])*exp(-Mu.s[i-1])
   }
   out <- list()
   out$Age <- Age
@@ -219,19 +221,19 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   
   # unfished egg abundance
   ifelse(input$SXR==100,
-           Eo <- input$Ro[dam.opt]*EPRo/input$Cstr,
-           Eo <- (input$Ro[dam.opt]/2*EPRo)/input$Cstr)
-
+         Eo <- input$Ro[dam.opt]*EPRo/input$Cstr,
+         Eo <- (input$Ro[dam.opt]/2*EPRo)/input$Cstr)
+  
   # fished eggs per recruit
   EpRf <- sum(init$AdjFec*init$Laf)
-
+  
   # Beverton-Holt alpha parameter (maximum recruits per spawner)
   reca <- input$recK/EPRo
   reca.st <- vector()  # alpha for each pre-recruit stanza
   for(i in 1:n.st){
     reca.st[i] <- exp(log(reca)*input$Ms[i]/sum(input$Ms[1:n.st]))
   }
-
+  
   # Beverton-Holt beta parameter (carrying capacity parameter)
   recb <- (input$recK-1)/(Eo)
   recb.st <- vector()  # beta for each pre-recruit stanza
@@ -240,33 +242,33 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   for(i in 1:n.st)
     den[i] <- input$Bs[i]*prod(tmp.reca.st[1:i])
   recb.st <- input$Bs[1:n.st]*recb/sum(den[1:n.st])
-
+  
   # effective egg abundance
   EfecEo <- max(0,(reca*EpRf-1)/(recb*EpRf))
-
+  
   # unfished eggs per recruit for stocked fish
   EPRo.s <- sum(init$AdjFec.s*init$La.s)
-
+  
   # unfished egg abundance for stocked fish
   ifelse(input$SXR==100,
-           Eo.s <- input$Ro[dam.opt]*EPRo.s,
-           Eo.s <- (input$Ro[dam.opt]/2*EPRo.s))
-
+         Eo.s <- input$Ro[dam.opt]*EPRo.s,
+         Eo.s <- (input$Ro[dam.opt]/2*EPRo.s))
+  
   # fished eggs per recruit for stocked fish
   EpRf.s <- sum(init$AdjFec.s*init$Laf.s)
-
+  
   # Beverton-Holt alpha parameter for stocked fish (maximum recruits per spawner)
   reca.s <- input$recK/EPRo.s
-
+  
   # Beverton-Holt beta parameter for stocked fish (carrying capacity parameter)
   recb.s <- (input$recK-1)/Eo.s
-
+  
   # effective egg abundance for stocked fish
   EfecEo.s <- max(0,(reca.s*EpRf.s-1)/(recb.s*EpRf.s))
-
+  
   # unfished abundance
   N0 <- sum(input$Ro[dam.opt]*init$La)
-
+  
   out<-list()
   out$EPRo <- EPRo
   out$Eo <- Eo
@@ -294,15 +296,15 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   EPRo <- sum(init$AdjFec*init$La)             # unfished eggs per recruit
   for(dam in 1:2){                             # evaluate without (1) and with (2) dam
     for(i in 1:500){
-      par.input$u <- U.opt[i]
+      par.input$ut <- rep(U.opt[i],110)
       init <- Initialization(par.input)
       EpRf <- sum(init$AdjFec*init$Laf)        # fished eggs per recruit at U=U.opt[i]
-        # calculate equilibrium fished recruits
+      # calculate equilibrium fished recruits
       Rf[i,dam] <- par.input$Ro[dam]*EPRo/EpRf*(par.input$recK*EpRf/EPRo-1)/(par.input$recK-1)
       VB[i,dam] <- Rf[i,dam]*sum(init$Wt*init$vuln[2:(n.age+1)]*init$Laf)  # vulnerable biomass
       VN[i,dam] <- Rf[i,dam]*sum(init$vuln[2:(n.age+1)]*init$Laf)          # vulnerable numbers of fish 
-      YB[i,dam] <- sum(par.input$u*VB[i,dam])       # yield in biomass
-      YN[i,dam] <- sum(par.input$u*VN[i,dam])       # yield in biomass
+      YB[i,dam] <- sum(U.opt[i]*VB[i,dam])       # yield in biomass
+      YN[i,dam] <- sum(U.opt[i]*VN[i,dam])       # yield in numbers
     }
   }
   out <- list()
@@ -336,13 +338,13 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   Fec.s <- init$Fec.s
   Sks.s <- init$Sks.s
   AdjFec.s <- init$AdjFec.s
-  Mu.s <- init$Mu.s
+  Mu.s <- init$Mu
   vuln.s <- init$vuln.s
   La.s <- init$La.s
   LaBurn.s <- init$LaBurn.s
   Laf.s <- init$Laf.s
   Mu.rec <- par.input$Mad.rec*(input$Linf/Length)
-  Mu.s.rec <- par.input$Mad.s.rec*(input$Linf/Length)
+  Mu.s.rec <- par.input$Mad.rec*(input$Linf/Length)
   
   yr <- vals$Year
   anom <- vals$Anomoly
@@ -350,7 +352,7 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   U <- vals$U
   Dam <- vals$Dam
   n.age <- length(Age)
-
+  
   calcs <- Prelim.Calc(par.input,1)   # preliminary calculations for pre-dam condition
   EPRo <- calcs$EPRo
   Eo <- list()
@@ -383,7 +385,7 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   Eo.s[[2]] <- calcs2$Eo.s
   recb.s[[2]] <- calcs2$recb.s
   EfecEo.s[[2]] <- calcs2$EfecEo.s
-
+  
   Nt <- vector()       # abundance of wild fish per year
   Bt <- vector()       # biomass of wild fish per year
   Eggs <- vector()     # wild eggs per year
@@ -396,11 +398,12 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   p.egg <- vector()    # proportion of total eggs that are wild-origin
   p.egg.s <- vector()  # proportion of total eggs that are hatchery-origin
   dyn.EPR <- rep(0,Ttot)  # dynamic eggs per recruit (used for true dynamic SPR)
+  dyn.EPR2 <- vector()
   R <- matrix(nrow=n.st,ncol=Ttot)        # wild recruits per year
   R.s <- matrix(nrow=n.st,ncol=Ttot)      # stocked recruits per year
   N.w <- matrix(nrow=Ttot+1,ncol=A)  # matrix of wild fish
   N.s <- N.w                        # matrix of stocked fish
-
+  
   # simulate equilibrium initial abundance (before dam)
   Sint <- c(rep(1,par.input$Nsk))
   N.w[1,1] <- par.input$Ro[1]*La[1]*par.input$SXR/100        # initial unfished wild recruits
@@ -423,22 +426,24 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
     R[1,y] <- R.t[y]*p.egg[y]+R.t[y]*p.egg.s[y]*(1-par.input$fid)  # wild recruits to stanza 1 (accounts for stocked eggs 'naturalizing')
     R.s[1,y] <- R.t[y]*p.egg.s[y]*par.input$fid       # stocked recruits to stanza 1
     ifelse(n.st==1,                               # if there is only 1 recruitment stanza
-      N.w[y+1,1] <- R[1,y],                       # age-1 fish are equal to calculated recruits
-      {                                           # if there are 2 recruitment stanzas (where stocked fish are now added)
-        tot.R <- R[1,y]+R.s[1,y]+par.input$stock*rel[y]           # competition for resources includes all fish (including stocked)
-        N.w[y+1,1] <- reca.st[2]*R[1,y]/(1+recb.st[[Dam[y]]][2]*tot.R)  # wild recruits to population are negatively impacted by competition from all
-      })
+           N.w[y+1,1] <- R[1,y],                       # age-1 fish are equal to calculated recruits
+           {                                           # if there are 2 recruitment stanzas (where stocked fish are now added)
+             tot.R <- R[1,y]+R.s[1,y]+par.input$stock*rel[y]           # competition for resources includes all fish (including stocked)
+             N.w[y+1,1] <- reca.st[2]*R[1,y]/(1+recb.st[[Dam[y]]][2]*tot.R)  # wild recruits to population are negatively impacted by competition from all
+           })
     for(a in 1:A){
       dyn.EPR[y] <- dyn.EPR[y]+(N.w[y,a]*AdjFec[a]+N.s[y,a]*AdjFec.s[a])/(N.w[max(y-a+1,1),1]+N.s[max(y-a+1,1),1])
     }
     N.w[y+1,2:A] <- pmax(0,N.w[y,1:(A-1)]*(1-U[y]*vuln[1:(A-1)])*exp(-Mu[1:(A-1)])) # wild abundance of older fish is impacted by length-specific natural mortality and exploitation
     ifelse(n.st==1,                                      # if there is only 1 recruitment stanza
-          N.s[y+1,1] <- R.s[1,y]+rel[y]*par.input$stock,     # age-1 stocked fish are equal to calculated recruits
-          {                                              # if there are 2 recruitment stanzas (where stocked fish are now added)
-            tot.R <- R[1,y]+R.s[1,y]+rel[y]*par.input$stock  # competition for resources includes all fish (including stocked)
-            R.s.tmp <- R.s[1,y]+rel[y]*par.input$stock       # hatchery fish...
-            N.s[y+1,1] <- reca.st[2]*R.s.tmp/(1+recb.st[[Dam[y]]][2]*tot.R)})  # hatchery recruits to population are negatively impacted by competition from all
+           N.s[y+1,1] <- R.s[1,y]+rel[y]*par.input$stock,     # age-1 stocked fish are equal to calculated recruits
+           {                                              # if there are 2 recruitment stanzas (where stocked fish are now added)
+             tot.R <- R[1,y]+R.s[1,y]+rel[y]*par.input$stock  # competition for resources includes all fish (including stocked)
+             R.s.tmp <- R.s[1,y]+rel[y]*par.input$stock       # hatchery fish...
+             N.s[y+1,1] <- reca.st[2]*R.s.tmp/(1+recb.st[[Dam[y]]][2]*tot.R)})  # hatchery recruits to population are negatively impacted by competition from all
     N.s[y+1,2:A] <- pmax(0,N.s[y,1:(A-1)]*(1-U[y]*vuln.s[1:(A-1)])*exp(-Mu.s[1:(A-1)]))  # hatchery recruits to population are negatively impacted by length-specific natural mortality and exploitation
+    if(y>=A)
+      dyn.EPR2[y] <- sum((N.w+N.s)[y,]*AdjFec/rev((N.w+N.s)[(y-A+1):y,1]))             # true dynamic SPR
   }
   # Annual summaries
   Nt <- pmax(0,rowSums(N.w))   # total wild abundance per year
@@ -460,7 +465,7 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   p.orig.B <- Bt/Bt[1]                 # biomass relative to unfished
   p.orig.vulnN <- vuln.N/vuln.N[1]
   dyn.SPR <- Eggs.t/Eggs.t[1]          # eggs relative to unfished (not really SPR)
-  dyn.SPR2 <- dyn.EPR/EPRo             # true dynamic SPR
+  dyn.SPR2 <- dyn.EPR2/EPRo
   
   out <- list()
   out$Nt <- Nt
@@ -484,6 +489,7 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
   out$p.orig.B <- p.orig.B
   out$dyn.SPR <- dyn.SPR
   out$dyn.SPR2 <- dyn.SPR2
+  out$dyn.EPR2 <- dyn.EPR2
   out$rat <- rat
   out$R.t <- R.t
   out$p.egg <- p.egg
@@ -502,7 +508,7 @@ DF <-data.frame(State = c("Unexploited",rep("|",T3-1),"End of Harvest",1:100),
 ###-------------------- Initialize ----------------------###
 ###------------------------------------------------------###
 
-theta <- c(log(0.5/(1-0.5)),log(0.12/(1-0.12)))  # estimate unfished recruits and two stages of exploitation
+theta <- c(log(0.5/(1-0.5)),log(0.12/(1-0.12)))  # estimate two stages of exploitation
 
 fr <- function(theta){
   trial.inp <- input
@@ -538,13 +544,13 @@ if(FIT){
   base.DF <- DF
   base.DF$Stock <- rep(FALSE,Ttot)
   base.inp$Ro <- mu.R0
-  base.DF$U = c(rep(mu.U1,T1),rep(mu.U2,T3-T1),rep(input$bu2,Ttot-T3))
+  #base.DF$U = c(rep(mu.U1,T1),rep(mu.U2,T3-T1),rep(input$bu2,Ttot-T3))
   mid.est <- Dynamic.Mod(base.inp,base.DF)
   base.inp$Ro <- L95.R0
-  base.DF$U = c(rep(L95.U1,T1),rep(L95.U2,T3-T1),rep(input$bu2,Ttot-T3))
+  #base.DF$U = c(rep(L95.U1,T1),rep(L95.U2,T3-T1),rep(input$bu2,Ttot-T3))
   low.est <- Dynamic.Mod(base.inp,base.DF)
   base.inp$Ro <- U95.R0
-  base.DF$U = c(rep(U95.U1,T1),rep(U95.U2,T3-T1),rep(input$bu2,Ttot-T3))
+  #base.DF$U = c(rep(U95.U1,T1),rep(U95.U2,T3-T1),rep(input$bu2,Ttot-T3))
   upp.est <- Dynamic.Mod(base.inp,base.DF)
   cat("Median SPR: ",mid.est$dyn.SPR2[T4],"\n")
   cat("CI: ",low.est$dyn.SPR2[T4],", ",upp.est$dyn.SPR2[T4],"\n")
@@ -561,8 +567,12 @@ if(FIT){
   axis(1,at=seq(0,Ttot,5),labels=FALSE,lwd=0.5)
   axis(2,at=seq(0,100000,10000),seq(0,100,10))
   axis(2,at=seq(0,100000,5000),labels=FALSE,lwd=0.5)
+  # put Wooley and Crateau 1985 estimate on the figure
+  points(T3,282,pch=19,col="purple")
+  lines(rep(T3,2),c(181,645),col="purple")
+  points(109,2000/(mid.est$a4N[109]/mid.est$N.sum[109]),pch=19,col="purple")
   legend("topright",lty=c(1,2,1),legend=c("Mean","95%  limits","Carrying capacity"),
-                                             bty="n",col=c("black","blue","brown"),lwd=2,cex=0.9)
+         bty="n",col=c("black","blue","brown"),lwd=2,cex=0.9)
 }
 #pdf("Figure 1.pdf",width=11,height=6)
 #Scenario1()
@@ -571,36 +581,40 @@ if(FIT){
 # inputs include baseline recruitment (R0), baseline 2nd stage exploitation (U.base)
 #   and then proportional change in 1st and 2nd exploitation rates to achieve 
 #   50, 75, 95 and 99% unfished abundance (N0) by 2023
-Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=0.56,p.99=0.5){
+Scenario2 <- function(mu.R0=c(9970,2605)){#,U.base=0.089,p.50=0.985,p.75=0.83,p.95=0.56,p.99=0.5){
   base.inp <- input
   base.DF <- DF
   base.DF$Stock <- rep(FALSE,Ttot)
   base.inp$Ro <- mu.R0
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
   baseline.est <- Dynamic.Mod(base.inp,base.DF)   # base model run
-  base.DF$U = base.DF$U * p.50
-  est.50 <- Dynamic.Mod(base.inp,base.DF)   # model run ending with 50% N0 by 2023
-  base.DF$U = base.DF$U * p.75
-  est.75 <- Dynamic.Mod(base.inp,base.DF)   # model run ending with 75% N0 by 2023
-  base.DF$U = base.DF$U * p.95
-  est.95 <- Dynamic.Mod(base.inp,base.DF)   # model run ending with 95% N0 by 2023
-  base.DF$U = base.DF$U * p.99
-  est.99 <- Dynamic.Mod(base.inp,base.DF)   # model run ending with 99% N0 by 2023
-  cat("To attain 50% carrying capacity, N would have to have been ",est.50$N.sum[T3]/baseline.est$N.sum[T3]," higher in 1984\n")
-  cat("To attain 75% carrying capacity, N would have to have been ",est.75$N.sum[T3]/baseline.est$N.sum[T3]," higher in 1984\n")
-  cat("To attain 95% carrying capacity, N would have to have been ",est.95$N.sum[T3]/baseline.est$N.sum[T3]," higher in 1984\n")
-  cat("To attain 99% carrying capacity, N would have to have been ",est.99$N.sum[T3]/baseline.est$N.sum[T3]," higher in 1984\n")
+  Ubase <- base.DF$U
+  Uinc <- seq(0,1,length=200)
+  est <- list()
+  N.2023 <- vector()
+  for(i in 1:200){
+    base.DF$U = Ubase * Uinc[i]
+    est[[i]] <- Dynamic.Mod(base.inp,base.DF)
+    N.2023[i] <- est[[i]]$N.sum[T4]
+  }
+  N50 <- which(N.2023/8784<0.50)[1]
+  N75 <- which(N.2023/8784<0.75)[1]
+  N95 <- which(N.2023/8784<0.95)[1]
+  N99 <- which(N.2023/8784<0.99)[1]
+  cat("To attain 50% carrying capacity, N would have to have been ",est[[N50]]$N.sum[T3]/baseline.est$N.sum[T3]," higher in 1984\n")
+  cat("To attain 75% carrying capacity, N would have to have been ",est[[N75]]$N.sum[T3]/baseline.est$N.sum[T3]," higher in 1984\n")
+  cat("To attain 95% carrying capacity, N would have to have been ",est[[N95]]$N.sum[T3]/baseline.est$N.sum[T3]," higher in 1984\n")
+  cat("To attain 99% carrying capacity, N would have to have been ",est[[N99]]$N.sum[T3]/baseline.est$N.sum[T3]," higher in 1984\n")
   cat("Baseline SPR: ",baseline.est$dyn.SPR2[T4],"\n")
-  cat("50% N0 SPR: ",est.50$dyn.SPR2[T4],"\n")
-  cat("75% N0 SPR: ",est.75$dyn.SPR2[T4],"\n")
-  cat("95% N0 SPR: ",est.95$dyn.SPR2[T4],"\n")
-  cat("99% N0 SPR: ",est.99$dyn.SPR2[T4],"\n")
+  cat("50% N0 SPR: ",est[[N50]]$dyn.SPR2[T4],"\n")
+  cat("75% N0 SPR: ",est[[N75]]$dyn.SPR2[T4],"\n")
+  cat("95% N0 SPR: ",est[[N95]]$dyn.SPR2[T4],"\n")
+  cat("99% N0 SPR: ",est[[N99]]$dyn.SPR2[T4],"\n")
   plot(baseline.est$N.sum[1:Ttot],t="l",lwd=2,xaxt="n",yaxt="n",ylim=c(-1,50000),
        ylab="Thousands of sturgeon",xlab="Year",xaxs="i",font.lab=2,yaxs="i")
-  lines(est.50$N.sum[1:Ttot],col="blue",lwd=2)
-  lines(est.75$N.sum[1:Ttot],col="grey",lwd=2)
-  lines(est.95$N.sum[1:Ttot],col="darkgreen",lwd=2)
-  lines(est.99$N.sum[1:Ttot],col="orange",lwd=2)
+  lines(est[[N50]]$N.sum[1:Ttot],col="blue",lwd=2)
+  lines(est[[N75]]$N.sum[1:Ttot],col="grey",lwd=2)
+  lines(est[[N95]]$N.sum[1:Ttot],col="darkgreen",lwd=2)
+  lines(est[[N99]]$N.sum[1:Ttot],col="orange",lwd=2)
   lines(baseline.est$N.sum[1:Ttot],col="black",lwd=2)
   axis(1,at=seq(0,Ttot,20),seq(1900,2085,20))
   axis(1,at=seq(0,Ttot,5),labels=FALSE,lwd=0.5)
@@ -611,45 +625,60 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
   abline(v=T4,col="green",lty=2,lwd=2)
   abline(h=8784,col="brown",lwd=2)
   legend("topright",lty=1,legend=c("Baseline","50% recovered","75% recovered",
-                                             "95% recovered","99% recovered","Carrying capacity"),
+                                   "95% recovered","99% recovered","Carrying capacity"),
          bty="n",col=c("black","blue","grey","darkgreen","orange","brown"),lwd=2,cex=0.9)
 }
 #pdf("Figure 2.pdf",width=11,height=6)
 #Scenario2()
 #dev.off()
 
-"Scenario3" <- function(mu.R0=c(9970,2605),U.base=0.089){
+"Scenario3" <- function(mu.R0=c(9970,2605)){#},U.base=0.089){
   base.inp <- input
   base.DF <- DF
   base.DF$Stock <- rep(FALSE,Ttot)
   base.inp$Ro <- mu.R0
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
+  #base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
   baseline.est <- Dynamic.Mod(base.inp,base.DF)   # base model run
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(0.01,Ttot-T3))
+  Ubase <- base.DF$U
+  base.DF$U[(T3+1):Ttot] <- 0.01
   U01.est <- Dynamic.Mod(base.inp,base.DF)   # additional exploitation pressure after 'closure'
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(0.05,Ttot-T3))
+  base.DF$U[(T3+1):Ttot] <- 0.05
   U05.est <- Dynamic.Mod(base.inp,base.DF)   # additional exploitation pressure after 'closure'
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(0.1,Ttot-T3))
+  base.DF$U[(T3+1):Ttot] <- 0.1
   U1.est <- Dynamic.Mod(base.inp,base.DF)   # additional exploitation pressure after 'closure'
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
+  base.DF$U <- Ubase
   base.inp$Mad.rec <- 0.145
   M145.est <- Dynamic.Mod(base.inp,base.DF)   # additional exploitation pressure after 'closure'
+  base.inp$Mad <- 0.145
+  EPRo145 <- Prelim.Calc(base.inp)$EPRo
   base.inp$Mad.rec <- 0.12
+  base.inp$Mad <- input$Mad
   M12.est <- Dynamic.Mod(base.inp,base.DF)   # additional exploitation pressure after 'closure'
+  base.inp$Mad <- 0.12
+  EPRo12 <- Prelim.Calc(base.inp)$EPRo
   base.inp$Mad.rec <- 0.105
+  base.inp$Mad <- input$Mad
   M105.est <- Dynamic.Mod(base.inp,base.DF)   # additional exploitation pressure after 'closure'
+  base.inp$Mad <- 0.105
+  EPRo105 <- Prelim.Calc(base.inp)$EPRo
   base.inp$Mad.rec <- 0.085
+  base.inp$Mad <- input$Mad
   M085.est <- Dynamic.Mod(base.inp,base.DF)   # additional exploitation pressure after 'closure'
+  base.inp$Mad <- 0.085
+  EPRo085 <- Prelim.Calc(base.inp)$EPRo
   base.inp$Mad.rec <- 0.07
+  base.inp$Mad <- input$Mad
   M07.est <- Dynamic.Mod(base.inp,base.DF)   # additional exploitation pressure after 'closure'
+  base.inp$Mad <- 0.07
+  EPRo07 <- Prelim.Calc(base.inp)$EPRo
   cat("U=0.01 SPR: ",baseline.est$dyn.SPR2[T4],"\n")
-  cat("U=0.5 SPR: ",U01.est$dyn.SPR2[T4],"\n")
-  cat("U=1 SPR: ",U1.est$dyn.SPR2[T4],"\n")
-  cat("M=0.145 SPR: ",M145.est$dyn.SPR2[T4],"\n")
-  cat("M=0.12 SPR: ",M12.est$dyn.SPR2[T4],"\n")
-  cat("M=0.105 SPR: ",M105.est$dyn.SPR2[T4],"\n")
-  cat("M=0.085 SPR: ",M085.est$dyn.SPR2[T4],"\n")
-  cat("M=0.07 SPR: ",M07.est$dyn.SPR2[T4],"\n")
+  cat("U=0.05 SPR: ",U01.est$dyn.SPR2[T4],"\n")
+  cat("U=0.1 SPR: ",U1.est$dyn.SPR2[T4],"\n")
+  cat("M=0.145 SPR: ",M145.est$dyn.EPR2[T4]/EPRo145,"\n")
+  cat("M=0.12 SPR: ",M12.est$dyn.EPR2[T4]/EPRo12,"\n")
+  cat("M=0.105 SPR: ",M105.est$dyn.EPR2[T4]/EPRo105,"\n")
+  cat("M=0.085 SPR: ",M085.est$dyn.EPR2[T4]/EPRo085,"\n")
+  cat("M=0.07 SPR: ",M07.est$dyn.EPR2[T4]/EPRo07,"\n")
   
   layout(matrix(1:2,nrow=1))
   par(mar=c(5,4,1,0))
@@ -669,9 +698,9 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
   abline(h=8784,col="brown",lwd=2)
   legend("topleft","A",text.font=2,cex=1.2,bty="n")
   legend("topright",lty=1,legend=c("Baseline","U=0.01","U=0.05",
-                                             "U=0.10","Carrying capacity"),
+                                   "U=0.10","Carrying capacity"),
          bty="n",col=c("black","blue","grey","darkgreen","brown"),lwd=2,cex=0.9)
-
+  
   par(mar=c(5,2,1,2))
   plot(baseline.est$N.sum[1:Ttot],t="l",lwd=2,xaxt="n",yaxt="n",ylim=c(0,50000),
        ylab="",xlab="Year",xaxs="i",font.lab=2,yaxs="i")
@@ -690,19 +719,19 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
   abline(h=9000,col="brown",lwd=2)
   legend("topleft","B",text.font=2,cex=1.2,bty="n")
   legend("topright",lty=1,legend=c("Baseline","M=0.146","M=0.120",
-                                             "M=0.105","M=0.085","M=0.070","Carrying capacity"),
+                                   "M=0.105","M=0.085","M=0.070","Carrying capacity"),
          bty="n",col=c("black","blue","darkgreen","orange","grey","purple","brown"),lwd=2,cex=0.9)
 }
 #pdf("Figure 3.pdf",width=11,height=6)
 #Scenario3()
 #dev.off()
 
-"Scenario4" <- function(mu.R0=c(9970,2605),U.base=0.089){
+"Scenario4" <- function(mu.R0=c(9970,2605)){#},U.base=0.089){
   base.inp <- input
   base.DF <- DF
   base.DF$Stock <- rep(FALSE,Ttot)
   base.inp$Ro <- mu.R0
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
+  #base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
   baseline.est <- Dynamic.Mod(base.inp,base.DF)   # base model run
   base.inp$astr <- 2
   base.inp$aint <- 2
@@ -717,7 +746,7 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
   base.inp$Nstr <- (base.inp$aint-base.inp$astr)/(base.inp$aint-1)  # Normal strength
   base.DF$Anomoly = c(rep(c(rep(base.inp$Nstr,base.inp$aint-1),base.inp$astr),length=Ttot))  
   skip5 <- Dynamic.Mod(base.inp,base.DF)   # spawn every 5th year
-
+  
   base.inp$astr <- 2
   base.inp$aint <- 1
   base.inp$Nstr <- (base.inp$aint-base.inp$astr)/(base.inp$aint-1)  # Normal strength
@@ -748,9 +777,9 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
   abline(h=8784,col="brown",lwd=2)
   legend("topleft","A",text.font=2,cex=1.2,bty="n")
   legend("topright",lty=1,legend=c("Baseline","1 of 2","1 of 4",
-                                 "1 of 5","Carrying capacity"),
+                                   "1 of 5","Carrying capacity"),
          bty="n",col=c("black","blue","grey","darkgreen","brown"),lwd=2,cex=0.9)
-
+  
   par(mar=c(5,2,1,2))
   plot(baseline.est$N.sum[1:Ttot],t="l",lwd=2,xaxt="n",yaxt="n",ylim=c(-1,50000),
        ylab="",xlab="Year",xaxs="i",font.lab=2,yaxs="i")
@@ -765,19 +794,19 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
   abline(h=8784,col="brown",lwd=2)
   legend("topleft","B",text.font=2,cex=1.2,bty="n")
   legend("topright",lty=1,legend=c("Baseline","+25% increase",
-                                 "Carrying capacity"),
+                                   "Carrying capacity"),
          bty="n",col=c("black","blue","brown"),lwd=2,cex=0.9)
 }
 #pdf("Figure 4.pdf",width=11,height=6)
 #Scenario4()
 #dev.off()
 
-"Scenario5" <- function(mu.R0=c(9970,2605),U.base=0.089){
+"Scenario5" <- function(mu.R0=c(9970,2605)){#,U.base=0.089){
   base.inp <- input
   base.DF <- DF
   base.DF$Stock <- rep(FALSE,Ttot)
   base.inp$Ro <- mu.R0
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
+  #base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
   baseline.est <- Dynamic.Mod(base.inp,base.DF)   # base model run
   base.inp$stock <- 5000
   base.DF$Stock <- c(rep(FALSE,T3),rep(TRUE,5),rep(FALSE,Ttot-T3-5))
@@ -796,7 +825,7 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
   cat("Stock 5000 for 5 years SPR: ",baseline.est$dyn.SPR2[T4],"\n")
   cat("Stock 2500 for 20 years SPR: ",baseline.est$dyn.SPR2[T4],"\n")
   cat("Stock 5000 for 20 years SPR: ",baseline.est$dyn.SPR2[T4],"\n")
-
+  
   layout(matrix(1:2,nrow=1))
   par(mar=c(5,4,1,0))
   plot(baseline.est$N.sum[1:Ttot],t="l",lwd=2,xaxt="n",yaxt="n",ylim=c(-1,50000),
@@ -841,12 +870,12 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
 #Scenario5()
 #dev.off()
 
-"Age.Structure" <- function(mu.R0=c(9970,2605),U.base=0.089){
+"Age.Structure" <- function(mu.R0=c(9970,2605)){#,U.base=0.089){
   base.inp <- input
   base.DF <- DF
   base.DF$Stock <- rep(FALSE,Ttot)
   base.inp$Ro <- mu.R0
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
+  #base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
   baseline.est <- Dynamic.Mod(base.inp,base.DF)   # base model run
   data <- melt(baseline.est$N.w)#/rowSums(baseline.est$N.w))
   
@@ -868,12 +897,12 @@ Scenario2 <- function(mu.R0=c(9970,2605),U.base=0.089,p.50=0.985,p.75=0.83,p.95=
     geom_hline(yintercept=y_intercept, color="white", size=0.2)
 }
 
-Appendix <- function(mu.R0=c(9970,2605),U.base=0.089){
+Appendix <- function(mu.R0=c(9970,2605)){#,U.base=0.089){
   base.inp <- input
   base.DF <- DF
   base.DF$Stock <- rep(FALSE,Ttot)
   base.inp$Ro <- mu.R0
-  base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
+  #base.DF$U = c(rep(input$u,T1),rep(U.base,T3-T1),rep(input$bu2,Ttot-T3))
   baseline.est <- Dynamic.Mod(base.inp,base.DF)$N.sum[1:Ttot]   # base model run
   base.inp$recK <- 3
   reck3 <- Dynamic.Mod(base.inp,base.DF)$N.sum[1:Ttot]   # model run ending with 50% N0 by 2023
